@@ -255,3 +255,80 @@ write.table(dat, file="carriers_all_patho_noGBAP1_annotated.tab", col.names=FALS
 
 q()
 ```
+## Quality Control
+Now we have an annotated coverage file for possibly pathogenic variants. Gotta clean it up.  
+  
+* remove exons 10 & 11 because we call these with Sanger sequencing:
+```unix
+sed -i '/'exon10'/d' carriers_all_patho_noGBAP1_annotated.tab
+sed -i '/'exon11'/d' carriers_all_patho_noGBAP1_annotated.tab
+```
+* exclude any which weren't annotated:
+```unix
+sed -i '/'NA'/d' carriers_all_patho_noGBAP1_annotated.tab
+````
+
+* count carriers of each variant & create a dictionary:
+````
+cut -f5 carriers_all_patho_noGBAP1_annotated.tab > variant_count.ls # cut -f2 if you want the position instead
+
+awk '{ 
+         for ( i=1; i<=NF; i++ ) # loop over all fields/columns
+            dict[$i]++;      	 # count occurrence in an array using the field value as index/key
+     }
+ END {                           # after processing all data
+         for (key in dict)       # iterate over all array keys
+             if(dict[key]>0)     # if the key occurred 
+                 print key " : " dict[key]    # print counter and key
+     }' variant_count.ls > temp.dict
+
+rm variant_count.ls
+
+tr ' ' '\t' < temp.dict > variant_counts.dict
+````
+* remove variants which were called in more than 20% of samples:  
+*This is a particular problem with the forced alignment VCF. Variants which are overcalled are generally poor quality.*
+````
+awk -v N=$N '{if ($3>N*0.20) print $1}' variant_counts.dict > too_many_calls.ls
+
+cat too_many_calls.ls  | while read line
+do
+   sed -i '/'$line'/d' carriers_all_patho_noGBAP1_annotated.tab # remove these variants from your file. 
+done 
+````
+* split the ones without differential AD:
+````
+grep "SPLIT" carriers_all_patho_noGBAP1_annotated.tab > carriers_DP_patho_noGBAP1_annotated.tab
+sed -i '/'SPLIT'/d' carriers_all_patho_noGBAP1_annotated.tab
+
+mv carriers_all_patho_noGBAP1_annotated.tab carriers_AD_patho_noGBAP1_annotated.tab
+````
+
+## Calling Variants  
+**AD Samples**
+* calculate total DP:
+````
+awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$8+$9}' carriers_AD_patho_noGBAP1_annotated.tab > temp_total.tab
+````
+
+* calculate percentage of calls for the alternate allele:
+````
+awk '{if ($9 > 0 && $10 > 0) {$(NF+1)=$9/$10; print;} \
+else {$(NF+1)="NA"; print;}}' \
+temp_total.tab > temp_all_info.tab
+````
+
+* make calls ($10 == total coverage, $11==percentage of alternate allele calls)
+**Criteria:**
+```unix
+awk '{$(NF+1)=$5; \
+if ($11 == "NA") {$(NF+1)="remove"; print;}
+else if ($10 < 15) {$(NF+1)="low_coverage"; print;} \
+else if ($11 < 0.05) {$(NF+1)="remove"; print;} \
+else if ($11 < 0.10) {$(NF+1)="poor_quality"; print;} \
+else if ($11 < 0.25) {$(NF+1)="het_low_confidence"; print;} \
+else if ($11 >= 0.90) {$(NF+1)="hom"; print;} \
+else if ($8 == 0 && $10 > 15) {$(NF+1)="hom"; print;} \
+else if ($11 >= 0.25) {$(NF+1)="het"; print;} \
+else {$(NF+1)="error"; print}}' temp_all_info.tab > temp_labeled_all_info.tab
+````
