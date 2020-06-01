@@ -93,3 +93,165 @@ awk '{if ($5 > 0 && $4>=0) print $0}' AD_patho_noGBAP1.vcf.tab > carriers_AD_pat
 cut -f2 -d ' ' carriers_AD_patho_noGBAP1.vcf.tab | sort | uniq > carrier_variants_to-investigate_AD.ls
 cut -f2 -d ' ' carriers_DP_select_noGBAP1.vcf.tab | sort | uniq > carrier_variants_to-investigate_DP.ls
 ````
+## Annotate the coverage files.  
+
+We'll use [table_annovar.pl](https://doc-openbio.readthedocs.io/projects/annovar/en/latest/user-guide/startup/) to create a parse-able table of annotations, then a lot of parsing to match them to our covarage files.  
+  
+**Creating input_annovar table (specifications for this on annovar website)**  
+
+*For those with AD data:*  
+* take chr, base pair, A1, A2:
+````
+grep -f carrier_variants_to-investigate_AD.ls ${NEW_NAME}_ANNOVAR_output.gatk.b37.RESULTS.vcf | cut -f1,2,4,5 > almost_input_annovar.txt
+````
+* if triallelic, take the second allele:
+````
+awk '{print $1,$2,$2,$3,$4}' almost_input_annovar.txt > to-tr_almost_input_annovar.txt
+tr ',' ' ' < to-tr_almost_input_annovar.txt > almost_input_annovar.txt
+awk '{if ($6>0) print $1,$2,$3,$4,$6; else print $1,$2,$3,$4,$5}' almost_input_annovar.txt > input_annovar1.txt
+````
+*For those with only DP:*
+* take chr, base pair, A1, A2:
+````
+grep -f carrier_variants_to-investigate_DP.ls ${NEW_NAME}_ANNOVAR_output.gatk.b37.RESULTS.vcf | cut -f1,2,4,5 > almost_input_annovar.txt
+````
+* if triallelic, take the first allele:  
+**Note:** This is an assumption. Since we don't have differential coverage (AD), we don't know which allele was called. The majority of the time, it is the "first" A1, which is why we make this assumption, but all of these should be validated in other data or taken with lots of precaution. *These variants will be indicated in the final file with "no_AD"*
+````
+awk '{print $1,$2,$2,$3,$4}' almost_input_annovar.txt > to-tr_almost_input_annovar.txt
+tr ',' ' ' < to-tr_almost_input_annovar.txt > almost_input_annovar.txt
+awk '{print $1,$2,$3,$4,$5}' almost_input_annovar.txt > input_annovar2.txt
+````
+
+* Combine the files and run table_annovar.pl:
+````
+cat input_annovar1.txt input_annovar2.txt > input_annovar.txt
+
+cat input_annovar1.txt input_annovar2.txt > input_annovar.txt
+bash ~/runs/go_lab/mips/unfiltered/forced_alingment_gba/CALLING/table_annovar.sh annotations_patho
+````
+
+* parse to get relevant information in clean table:
+````
+cut -f10 annotations_patho.hg19_multianno.txt > parse_proChange.tab
+sed -i 's/':'/\t/g' parse_proChange.tab
+cut -f11,13 parse_proChange.tab > parse_again.tab
+sed -i 's/','/\t/g' parse_again.tab
+awk '{print $1,$2}' parse_again.tab > paste_proChange.tab
+awk '{print $1,$2,$9}' annotations_patho.hg19_multianno.txt > to_paste_anno.txt
+paste to_paste_anno.txt paste_proChange.tab > likely_pathogenic_annotations.tab
+rm *paste*
+rm *parse*
+
+tr ' ' '\t' < likely_pathogenic_annotations.tab > likely_pathogenic_annotations.tab2
+mv likely_pathogenic_annotations.tab2 likely_pathogenic_annotations.tab
+````
+* remove "p." from protein change and exclude any which weren't annotated:
+````
+* remove "p." from protein change and exclude any which weren't annotated:
+sed -i 's/'p.'//g' likely_pathogenic_annotations.tab
+awk '{if ($3 !=".") print $0}' likely_pathogenic_annotations.tab > temp_anno.tab
+
+tr ' ' '\t' < temp_anno.tab > likely_pathogenic_annotations.tab
+rm temp_anno.tab
+````
+
+* convert GBA notations to manuscript notations:
+````
+cp ~/runs/go_lab/mips/unfiltered/forced_alingment_gba/CALLING/convert_gba_notations.py .
+./convert_gba_notations.py
+````
+**The notation conversion python script for reference:**
+```python
+import pandas as pd
+
+def convert(list):
+
+    # Converting integer list to string list
+    s = [str(i) for i in list]
+
+    # Join list items using join()
+    res = "".join(s)
+
+    return(res)
+
+
+def convert_gba_notation(variants):
+
+    set_of_variants = set(variants)
+    new_dict = {}
+
+    for index, element in enumerate(set_of_variants):
+        letters = []
+        number = []
+        garbage = []
+        for i in element:
+            if not i.isdecimal():
+                letters.append(i)
+            elif i.isdecimal():
+                number.append(i)
+            else: garbage.append(i)
+        number = int(convert(number))
+        if number > 39:
+            new_number = number-39
+        else:
+            new_number = number-40
+
+        new = [letters[0], str(new_number), letters[1]]
+        new = convert(new)
+
+        new_dict[element] = new
+
+
+    df = pd.DataFrame(new_dict.items(), columns = ["PROTEIN_CHANGE", "NEW"])
+    return df
+
+
+df = pd.read_csv("likely_pathogenic_annotations.tab", delimiter="\t")
+
+df.columns = ['Chr', 'Start', 'ExonicFunc', 'Exon', 'Protein_Change']
+
+list_of_pros = df['Protein_Change'].values.tolist()
+
+conversion = convert_gba_notation(list_of_pros)
+
+conversion.to_csv(r'notation_conversion.tab', index = False, sep="\t")
+````
+
+* combine AD and DP files:
+````
+cat carriers_AD_patho_noGBAP1.vcf.tab carriers_DP_select_noGBAP1.vcf.tab > temp_carriers_all_to-R.tab
+awk '{print $1,$2,$3,$4,$5}' temp_carriers_all_to-R.tab > carriers_all_to-R.tab
+````
+
+* annotate the coverage files:
+````
+cp ~/runs/go_lab/mips/unfiltered/forced_alingment_gba/CALLING/merge_AD_annotations.R .
+R < merge_AD_annotations.R --no-save
+
+rm temp*
+rm carriers_all_to-R.tab
+````
+
+**The annotation R script for reference:**
+```R
+require(data.table)
+
+data1 <- fread("likely_pathogenic_annotations.tab")
+data2 <- fread("carriers_all_to-R.tab")
+data3 <- fread("notation_conversion.tab")
+
+colnames(data1) <- c("CHR", "POS", "FUNCTION", "EXON", "PROTEIN_CHANGE")
+colnames(data2) <- c("chrom", "POS", "S_NUM", "COV_A1", "COV_A2")
+colnames(data3) <- c("PRO_CHANGE", "NEW")
+
+
+merge1 <- merge(data1, data3, by.x="PROTEIN_CHANGE", by.y="PRO_CHANGE", all.x=TRUE)
+mdata <- merge1[,c("CHR", "POS", "FUNCTION", "EXON", "PROTEIN_CHANGE", "NEW")]
+merged <- merge(mdata, data2, by="POS",all.y=TRUE)
+dat <- merged[,c("chrom", "POS", "EXON", "FUNCTION", "NEW", "PROTEIN_CHANGE", "S_NUM", "COV_A1", "COV_A2")]
+
+write.table(dat, file="carriers_all_patho_noGBAP1_annotated.tab", col.names=FALSE, row.names=FALSE, quote=FALSE, sep = "\t")
+
+q()
+```
