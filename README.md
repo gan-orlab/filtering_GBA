@@ -328,8 +328,8 @@ temp_total.tab > temp_all_info.tab
 ````
 
 * make calls ($10 == total coverage, $11==percentage of alternate allele calls)
-**Criteria:**
-```unix
+
+````
 awk '{$(NF+1)=$5; \
 if ($11 == "NA") {$(NF+1)="remove"; print;}
 else if ($10 < 15) {$(NF+1)="low_coverage"; print;} \
@@ -341,3 +341,127 @@ else if ($8 == 0 && $10 > 15) {$(NF+1)="hom"; print;} \
 else if ($11 >= 0.25) {$(NF+1)="het"; print;} \
 else {$(NF+1)="error"; print}}' temp_all_info.tab > temp_labeled_all_info.tab
 ````
+
+* make separate table for all "removed" variants (for future reference) & remove them from main file:
+````
+grep remove temp_labeled_all_info.tab > all_removed1.tab
+sed -i '/'remove'/d' temp_labeled_all_info.tab
+````
+**DP Samples**
+
+* make calls for DP (based on VCF calls):
+````
+ awk '{$(NF+1)=$5; \
+if ($8>15 && $9=="0/1") {$(NF+1)="het_no-DP"; print;} \
+else if ($8 > 15 && $9 == "1/1") {$(NF+1)="hom_no-DP"; print;} \
+else if ($8 < 15 && $9 == "0/1") {$(NF+1)="het_LC_no-DP"; print;} \
+else if ($8 < 15 && $9 == "1/1") {$(NF+1)="hom_LC_no-DP"; print;} \
+else {$(NF+1)="uncertain_no-DP"; print;}}' carriers_DP_patho_noGBAP1_annotated.tab \
+ > temp_labeled_DP_info.tab
+ ````
+* make separate table for all removed variants & remove them from main file:
+````
+grep uncertain temp_labeled_DP_info.tab > all_removed2.tab
+cat all_removed1.tab all_removed2.tab > all_removed.tab
+
+sed -i '/'uncertain'/d' temp_labeled_DP_info.tab
+
+rm all_removed1.tab all_removed2.tab
+````
+ 
+* join calls with the variant notation: 
+````
+sed -i 's/\s/':'/12' temp_labeled_all_info.tab
+sed -i 's/\s/':'/10' temp_labeled_DP_info.tab
+````
+
+## Finalize files
+* combine AD&DP files:
+````
+awk '{print $1,$2,$3,$4,$5,$6,$7,$10,$12}' temp_labeled_all_info.tab > temp_join1.tab
+awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$10}' temp_labeled_DP_info.tab > temp_join2.tab
+
+cat temp_join1.tab temp_join2.tab > temp_all_info_filtered_AD-DP.tab
+````
+
+* add headers:
+````
+sed -i '1i\CHR POS EXON FUNCTION NOTATION1 NOTATION2 SAMPLE A1_COV A2_COV TOTAL_COV PERCENT_ALT REC_CALL' temp_labeled_all_info.tab
+sed -i '1i\CHR POS EXON FUNCTION NOTATION1 NOTATION2 SAMPLE TOTAL_COV REC_CALL' temp_all_info_filtered_AD-DP.tab
+````
+
+* make it tab delimited because I like it:
+````
+tr ' ' '\t' < temp_labeled_all_info.tab > all_info_filtered_AD_noGBAP1.tab
+tr ' ' '\t' < temp_all_info_filtered_AD-DP.tab > temp_all_info_filtered_AD-DP.tab
+````
+* remove synonymous variants (somehow they creep in, will resolve later):
+````
+sed -e "/\<synonymous\>/d" < temp_all_info_filtered_AD-DP.tab > all_info_filtered_AD-DP.tab
+````
+
+* **Make your CSV with calls per sample!:**
+````
+cp ~/runs/go_lab/mips/unfiltered/forced_alingment_gba/CALLING/final_output_perSample.py .
+./final_output_perSample.py
+````
+**Python script for reference:**
+```python
+import pandas as pd
+
+pdata = pd.read_csv("all_info_filtered_AD-DP.tab", delimiter="\t")
+
+df = pdata
+
+list_of_names = df['SAMPLE'].values.tolist()
+list_of_calls = df['REC_CALL'].values.tolist()
+
+
+d = {}
+
+for name, pro in zip(list_of_names, list_of_calls):
+    if name not in d:
+        d[name] = pro
+    elif type(d[name]) == list:
+        d[name].append(pro)
+    else:
+        d[name] = [d[name], pro]
+
+
+df_dict = pd.DataFrame(d.items(), columns = ["Sample", "GBA_variants"])
+
+print(df_dict.head())
+
+df_dict.to_csv(r'gba_pipeline_finalOutput.csv', index = False)
+````
+
+**FILE TO SAVE** : gba_pipeline_finalOutput.csv
+
+* add header to original annotated coverage file:
+````
+sed -i '1i\CHR\tPOS\tEXON\tFUNCTION\tNOTATION1\tNOTATION2\tSAMPLE\tA1_COV\tA2_COV' carriers_AD_patho_noGBAP1_annotated.tab
+````
+
+**Clean up:** 
+````
+rm temp*
+rm carriers_AD_patho_noGBAP1.vcf.tab
+rm AD_patho_noGBAP1.vcf.tab
+
+mkdir COVERAGE_FILES
+mv *AD* COVERAGE_FILES
+
+mkdir ANNOTATIONS
+mv *annotations* ANNOTATIONS
+
+mkdir VARIANT_LISTS
+mv *.ls VARIANT_LISTS
+
+rm input_annovar.txt
+rm *.out
+````
+rm *.py
+rm *.R
+
+
+rm -r ${NEW_NAME}_ANNOVAR_analysis_files_*
