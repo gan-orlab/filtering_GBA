@@ -306,7 +306,7 @@ mv carriers_all_patho_noGBAP1_annotated.tab carriers_AD_patho_noGBAP1_annotated.
 
 ## Calling Variants  
 Call | Criteria
-_____|_________
+-----|---------
 Remove | No alternate allele call; alternate allele <5% total calls; no call (DP data)
 Low coverage (LC) | <15 total coverage
 Poor quality | 5% < alt allele < 10% total calls
