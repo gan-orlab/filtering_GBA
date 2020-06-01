@@ -1,7 +1,7 @@
 # filtering_GBA
 Special quality control is necessary for GBA because of sequencing issues caused by GBAP1. This pipeline should be run on both the forced alignment GBA VCF (excluding the pseudogene) and the regular VCF, to compare.
 
-** Start by annotating your VCF and selecting possible pathogenic variants. **
+## Start by annotating your VCF and selecting possible pathogenic variants.
 
 ````
 #!/bin/bash
@@ -35,7 +35,7 @@ grep splicing ${NEW_NAME}_ANNOVAR_output.gatk.b37.RESULTS.vcf | cut -f2 > splici
 cat frameshift_variants.ls nonsynonymous_variants.ls stopgain_variants.ls splicing_variants.ls > extract_possibly-pathogenic_variants.ls
 ````
 
-** Next, parse the VCF to extract relevant information. **
+## Next, parse the VCF to extract relevant information.
 The most important piece of information here is the depth of coverage per allele (AD). 
 Unfortunately, some sites don't have this information, and only have total depth of coverage (DP). 
 For those sites, we extract the DP and the genotype call (GT). We don't have a way to filter these by
