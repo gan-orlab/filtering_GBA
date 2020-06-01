@@ -76,7 +76,7 @@ awk '{if ($5 != "0/0" && $4 != "./.") print $1="SPLIT",$2,$3,$4,$5}' DP_GT_noGBA
 tr ',' '\t' < to-tr_AD_patho_noGBAP1.vcf.tab > temp_AD_patho_noGBAP1.vcf.tab
 ````
 * extract tri-allelic positions that seem real:  
-(any will calls for *all 3* alleles are removed. All with more than 3 alleles are removed.)
+(any with calls for *all 3* alleles are removed. All with more than 3 alleles are removed.)
 ````
 awk '{if ($6>0 && $5==0) print $1="TRI",$2,$3,$4,$6; else if ($6>0 && $5>0) print $1="TRI",$2,$3,$4,$5=0; else if ($6<0) print $1,$2,$3,$4,$5}' temp_AD_patho_noGBAP1.vcf.tab > AD_patho_noGBAP1.vcf.tab 
 
@@ -400,7 +400,7 @@ tr ' ' '\t' < temp_all_info_filtered_AD-DP.tab > temp_all_info_filtered_AD-DP.ta
 sed -e "/\<synonymous\>/d" < temp_all_info_filtered_AD-DP.tab > all_info_filtered_AD-DP.tab
 ````
 
-* **Make your CSV with calls per sample!:**
+## Make your CSV with calls per sample!
 ````
 cp ~/runs/go_lab/mips/unfiltered/forced_alingment_gba/CALLING/final_output_perSample.py .
 ./final_output_perSample.py
@@ -459,9 +459,10 @@ mv *.ls VARIANT_LISTS
 
 rm input_annovar.txt
 rm *.out
-````
+
 rm *.py
 rm *.R
 
 
 rm -r ${NEW_NAME}_ANNOVAR_analysis_files_*
+````
