@@ -1,5 +1,8 @@
 # filtering_GBA
-Special quality control is necessary for GBA because of sequencing issues caused by GBAP1. This pipeline should be run on both the forced alignment GBA VCF (excluding the pseudogene) and the regular VCF, to compare.
+Special quality control is necessary for GBA because of sequencing issues caused by GBAP1. This pipeline should be run on both the forced alignment GBA VCF (excluding the pseudogene) and the regular VCF, to compare.  
+
+**If on Beluga: you can take the bash script and run it as is.**  
+bash filtering_GBA.sh $VCF $NEW_NAME $N
 
 ## Enter your variables. 
 If you're starting from a forced alignment VCF, it will already include only GBA.  
